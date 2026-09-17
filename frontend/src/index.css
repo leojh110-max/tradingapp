@@ -1,0 +1,164 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b0f14;
+  --bg-elevated: #111823;
+  --border: #243042;
+  --text: #e7ecf3;
+  --muted: #9aa4b2;
+  --up: #3dd68c;
+  --down: #f0616d;
+  --neutral: #8b95a7;
+  --accent: #6ea8fe;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  overflow: hidden;
+}
+
+.app-shell,
+.workspace {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chart-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.chart-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.symbol-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.market-pill,
+.exchange-pill {
+  font-size: 12px;
+  text-transform: capitalize;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.timeframe-bar {
+  display: flex;
+  gap: 4px;
+}
+
+.tf-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tf-btn:hover:not(.tf-btn-active) {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.tf-btn-active {
+  color: var(--text);
+  border-color: var(--border);
+  background: #182232;
+  opacity: 1;
+  cursor: default;
+}
+
+.ohlc-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+
+.ohlc-empty,
+.ohlc-time {
+  color: var(--muted);
+}
+
+.ohlc-label {
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+.ohlc-value-up {
+  color: var(--up);
+}
+
+.ohlc-value-down {
+  color: var(--down);
+}
+
+.ohlc-value-neutral {
+  color: var(--neutral);
+}
+
+.chart-stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.chart-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.chart-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  background: var(--bg-elevated);
+}
+
+.workspace-message {
+  margin: auto;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.workspace-error {
+  color: var(--down);
+}

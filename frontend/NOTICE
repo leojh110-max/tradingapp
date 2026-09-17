@@ -1,0 +1,7 @@
+lightweight-charts
+Copyright (c) 2019 TradingView, Inc.
+Licensed under the Apache License, Version 2.0.
+
+The local npm package is bundled into this offline application. The TradingView
+attribution logo is disabled (`layout.attributionLogo = false`) so the running
+app does not open or fetch https://www.tradingview.com/.
