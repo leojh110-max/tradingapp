@@ -2,25 +2,34 @@ import { useEffect, useRef, useState } from "react";
 import { useMarketData } from "../../hooks/useMarketData";
 import type { Candle, Timeframe } from "../../types/market";
 import { formatCount } from "../../utils/format";
+import { CHART_LOAD_ERROR } from "../../utils/loadingOverlay";
 import type { TimeRangeMs } from "../../utils/timeframes";
 import { CandlestickChart } from "./CandlestickChart";
+import { ChartErrorPanel } from "./ChartErrorPanel";
 import { ChartHeader } from "./ChartHeader";
+import { HistoricalLoadingIndicator } from "./HistoricalLoadingIndicator";
+import { PrimaryLoadingOverlay } from "./PrimaryLoadingOverlay";
 
 export function ChartWorkspace() {
   const {
     interval,
+    pendingInterval,
     info,
     candles,
     status,
     error,
+    retry,
     loadOlder,
     loadingOlder,
+    olderError,
     hasOlder,
     changeTimeframe,
     restoreRange,
+    showPrimaryOverlay,
   } = useMarketData();
   const [hovered, setHovered] = useState<Candle | null>(null);
   const visibleRangeRef = useRef<TimeRangeMs | null>(null);
+  const overlayInterval = pendingInterval ?? interval;
 
   useEffect(() => {
     if (hovered === null && candles.length > 0 && status === "ready") {
@@ -33,33 +42,33 @@ export function ChartWorkspace() {
     changeTimeframe(next, visibleRangeRef.current);
   };
 
-  if (status === "loading" && info === null) {
-    return (
-      <div className="workspace">
-        <div className="workspace-message">Loading...</div>
-      </div>
-    );
-  }
-  if (status === "error" || info === null) {
-    return (
-      <div className="workspace">
-        <div className="workspace-message workspace-error">{error ?? "Failed to load market data"}</div>
-      </div>
-    );
-  }
+  const historyLabel = loadingOlder
+    ? "Loading older candles..."
+    : olderError
+      ? olderError
+      : hasOlder
+        ? "Pan left for older candles"
+        : "Start of history";
 
   return (
     <div className="workspace">
-      <ChartHeader
-        info={info}
-        interval={interval}
-        hovered={hovered}
-        onSelectTimeframe={onSelectTimeframe}
-      />
+      {info !== null ? (
+        <ChartHeader
+          info={info}
+          interval={interval}
+          pendingInterval={status === "loading" ? pendingInterval : null}
+          hovered={hovered}
+          onSelectTimeframe={onSelectTimeframe}
+        />
+      ) : (
+        <header className="chart-header">
+          <div className="chart-identity">
+            <h1 className="symbol-title">BTC / USDT</h1>
+          </div>
+        </header>
+      )}
       <div className="chart-stage">
-        {status === "loading" || candles.length === 0 ? (
-          <div className="workspace-message">{status === "loading" ? "Loading..." : "No data"}</div>
-        ) : (
+        {candles.length > 0 ? (
           <CandlestickChart
             key={interval}
             candles={candles}
@@ -74,15 +83,21 @@ export function ChartWorkspace() {
             }}
             loadingOlder={loadingOlder}
           />
-        )}
+        ) : null}
+        {showPrimaryOverlay ? <PrimaryLoadingOverlay interval={overlayInterval} /> : null}
+        {status === "error" ? <ChartErrorPanel message={error ?? CHART_LOAD_ERROR} onRetry={retry} /> : null}
+        {loadingOlder ? <HistoricalLoadingIndicator /> : null}
       </div>
       <footer className="chart-footer">
         <span>
           Loaded {formatCount(candles.length)} {interval} candles
-          {interval === "1m" ? ` of ${formatCount(info.candleCount)}` : ""}
+          {info !== null && interval === "1m" ? ` of ${formatCount(info.candleCount)}` : ""}
         </span>
-        <span>Timeframe {interval}{interval === "1d" ? " (UTC)" : ""}</span>
-        <span>{loadingOlder ? "Loading history..." : hasOlder ? "Pan left for older candles" : "Start of history"}</span>
+        <span>
+          Timeframe {overlayInterval}
+          {overlayInterval === "1d" ? " (UTC)" : ""}
+        </span>
+        <span>{historyLabel}</span>
         <span>Offline</span>
       </footer>
     </div>

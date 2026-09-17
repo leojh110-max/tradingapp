@@ -98,7 +98,11 @@ body {
   border-color: var(--border);
   background: #182232;
   opacity: 1;
-  cursor: default;
+}
+
+.tf-btn-loading {
+  color: var(--accent);
+  border-color: #2d4a73;
 }
 
 .ohlc-readout {
@@ -161,4 +165,117 @@ body {
 
 .workspace-error {
   color: var(--down);
+}
+
+.chart-loading-overlay,
+.chart-error-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+
+.chart-loading-overlay {
+  background: rgba(8, 12, 18, 0.58);
+  pointer-events: none;
+}
+
+.chart-error-overlay {
+  background: rgba(8, 12, 18, 0.72);
+}
+
+.chart-loading-card,
+.chart-error-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(17, 24, 35, 0.92);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.chart-loading-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chart-loading-title,
+.chart-error-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.chart-loading-subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chart-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #2a3a52;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: chart-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.chart-spinner-sm {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+
+@keyframes chart-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.chart-retry-btn {
+  margin-top: 10px;
+  background: #182232;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.chart-retry-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chart-error-card {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.history-loading-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(17, 24, 35, 0.88);
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
 }

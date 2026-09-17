@@ -49,11 +49,11 @@ def aggregate_ohlcv_rows(rows: Iterable[tuple[int, str, str, str, str, str]], in
         if start == current_start:
             current.append(row)
             continue
-        buckets.append(_reduce_bucket_rows(current, current_start, interval))
+        buckets.append(reduce_bucket_rows(current, current_start, interval))
         current_start = start
         current = [row]
     if current and current_start is not None:
-        buckets.append(_reduce_bucket_rows(current, current_start, interval))
+        buckets.append(reduce_bucket_rows(current, current_start, interval))
     return buckets
 
 
@@ -70,7 +70,7 @@ def aggregate_source_candles(candles: Sequence[Candle], interval: str) -> list[C
     )
 
 
-def _reduce_bucket_rows(
+def reduce_bucket_rows(
     source: Sequence[tuple[int, str, str, str, str, str]],
     bucket_start: int,
     interval: str,

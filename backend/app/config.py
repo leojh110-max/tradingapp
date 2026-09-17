@@ -38,6 +38,10 @@ def default_database_path() -> Path:
     )
 
 
+def default_cache_path() -> Path:
+    return Path(__file__).resolve().parents[2] / "data" / "cache" / "aggregate_cache.db"
+
+
 @dataclass(frozen=True)
 class Settings:
     database_path: Path
@@ -48,6 +52,7 @@ class Settings:
         "http://localhost:5173",
     )
     frontend_dist: Path = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    cache_path: Path = default_cache_path()
 
     @property
     def exchange(self) -> str:
@@ -69,4 +74,6 @@ class Settings:
 def load_settings() -> Settings:
     raw = os.environ.get("MARKET_DB_PATH", "").strip()
     database_path = Path(raw) if raw else default_database_path()
-    return Settings(database_path=database_path.resolve())
+    cache_raw = os.environ.get("AGGREGATE_CACHE_PATH", "").strip()
+    cache_path = Path(cache_raw) if cache_raw else default_cache_path()
+    return Settings(database_path=database_path.resolve(), cache_path=cache_path.resolve())

@@ -71,6 +71,26 @@ class CandleRepository:
             candle_count=count,
         )
 
+    def get_series_bounds(
+        self,
+        *,
+        exchange: str,
+        market: str,
+        symbol: str,
+        interval: str,
+    ) -> tuple[int | None, int | None]:
+        row = self._conn.execute(
+            f"""
+            SELECT MIN(open_time) AS first_open_time, MAX(open_time) AS last_open_time
+            FROM candles
+            WHERE {_SERIES_FILTER}
+            """,
+            (exchange, market, symbol, interval),
+        ).fetchone()
+        first = int(row["first_open_time"]) if row and row["first_open_time"] is not None else None
+        last = int(row["last_open_time"]) if row and row["last_open_time"] is not None else None
+        return first, last
+
     def iter_ohlcv_range(
         self,
         *,

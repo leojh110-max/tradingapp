@@ -158,3 +158,9 @@ aggregation. Later 1m candles are not read.
 
 If cutoff falls inside a bucket, that higher-timeframe candle is returned
 `complete = false` using only allowed source rows (no look-ahead).
+
+## Derived cache
+
+Phase 2-C may materialize the same UTC-bucket candles in
+`data/cache/aggregate_cache.db`. That file is not a source of truth. Cache
+generation must use this policy's aggregation core. See `docs/CACHE.md`.

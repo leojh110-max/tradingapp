@@ -22,6 +22,25 @@ TIMEFRAME_MS: dict[str, int] = {
 
 SUPPORTED_INTERVALS: tuple[str, ...] = tuple(TIMEFRAME_MS.keys())
 
+CACHED_INTERVALS: tuple[str, ...] = tuple(
+    name for name in SUPPORTED_INTERVALS if name != SOURCE_INTERVAL
+)
+
+CACHE_SCHEMA_VERSION = 1
+AGGREGATION_POLICY_VERSION = "utc-calendar-v1"
+
+
+def last_complete_bucket_start(cutoff_ms: int, timeframe_ms: int) -> int:
+    """Highest HTF bucket whose full UTC range is at or before cutoff.
+
+    A cached completed candle for this bucket cannot contain source rows after
+    cutoff. The bucket that contains cutoff is never returned by this helper.
+    """
+    containing = utc_bucket_start(cutoff_ms, timeframe_ms)
+    if utc_bucket_end_inclusive(containing, timeframe_ms) <= cutoff_ms:
+        return containing
+    return containing - timeframe_ms
+
 
 def interval_ms(interval: str) -> int:
     try:

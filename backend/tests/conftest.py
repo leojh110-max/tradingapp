@@ -120,7 +120,11 @@ def fixture_db(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def settings(fixture_db: Path, tmp_path: Path) -> Settings:
-    return Settings(database_path=fixture_db, frontend_dist=tmp_path / "missing-dist")
+    return Settings(
+        database_path=fixture_db,
+        frontend_dist=tmp_path / "missing-dist",
+        cache_path=tmp_path / "aggregate_cache.db",
+    )
 
 
 @pytest.fixture()

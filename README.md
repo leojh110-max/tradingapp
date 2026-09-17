@@ -10,9 +10,10 @@ The chart can switch:
 
 `1m` `5m` `10m` `15m` `30m` `1h` `4h` `1d`
 
-`1m` is the Master Dataset. Higher timeframes are computed in the backend from
-bounded 1m range queries using UTC calendar buckets. See
-`docs/AGGREGATION_POLICY.md`. Aggregated candles are not stored in `market.db`.
+`1m` is the Master Dataset. Higher timeframes are computed from bounded 1m
+range queries using UTC calendar buckets. See `docs/AGGREGATION_POLICY.md`.
+A derived cache (`data/cache/aggregate_cache.db`) may store those results for
+speed; it is disposable and is never a source of truth. See `docs/CACHE.md`.
 
 
 ## Offline rules
@@ -29,7 +30,17 @@ Phase 1 `market.db` is opened **read-only**. This app never deletes, updates, ro
 
 `E:\Development\candlestick_chart\Binance Historical Data Manager\data\database\market.db`
 
-Override with `MARKET_DB_PATH` if needed.
+Override with `MARKET_DB_PATH` if needed. Derived cache path:
+`AGGREGATE_CACHE_PATH` (default `tradingapp/data/cache/aggregate_cache.db`).
+
+## HTF cache
+
+```powershell
+cd E:\Development\candlestick_chart\tradingapp\backend
+python -m app.cache status
+python -m app.cache build
+python -m app.cache validate
+```
 
 ## Backend
 
@@ -84,4 +95,4 @@ The backend will serve `frontend/dist` automatically when that folder exists, so
 
 ## What this phase does not include
 
-Replay, orders, positions, indicators, drawing tools, multi-symbol support, and higher-timeframe aggregation.
+Replay, orders, positions, indicators, drawing tools, and multi-symbol support.

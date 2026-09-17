@@ -6,11 +6,12 @@ import { TimeframeBar } from "./TimeframeBar";
 type Props = {
   info: MarketInfo;
   interval: Timeframe;
+  pendingInterval?: Timeframe | null;
   hovered: Candle | null;
   onSelectTimeframe: (timeframe: Timeframe) => void;
 };
 
-export function ChartHeader({ info, interval, hovered, onSelectTimeframe }: Props) {
+export function ChartHeader({ info, interval, pendingInterval = null, hovered, onSelectTimeframe }: Props) {
   return (
     <header className="chart-header">
       <div className="chart-identity">
@@ -18,7 +19,7 @@ export function ChartHeader({ info, interval, hovered, onSelectTimeframe }: Prop
         <span className="market-pill">{marketLabel(info.market)}</span>
         <span className="exchange-pill">{info.exchange}</span>
       </div>
-      <TimeframeBar active={interval} onSelect={onSelectTimeframe} />
+      <TimeframeBar active={interval} pending={pendingInterval} onSelect={onSelectTimeframe} />
       <OhlcReadout candle={hovered} interval={interval} />
     </header>
   );

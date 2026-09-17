@@ -11,5 +11,7 @@ dist/
 Thumbs.db
 .vscode/
 .idea/
-frontend/coverage/
-backend/.coverage
+data/cache/*.db
+data/cache/*.db-wal
+data/cache/*.db-shm
+!data/cache/.gitkeep

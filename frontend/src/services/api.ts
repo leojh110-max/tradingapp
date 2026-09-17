@@ -2,7 +2,11 @@ import type { Candle, CandlePage, MarketInfo } from "../types/market";
 
 const API_BASE = "";
 
-async function getJson<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
+async function getJson<T>(
+  path: string,
+  params?: Record<string, string | number | undefined>,
+  signal?: AbortSignal,
+): Promise<T> {
   const url = new URL(`${API_BASE}${path}`, window.location.origin);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
@@ -11,7 +15,7 @@ async function getJson<T>(path: string, params?: Record<string, string | number 
       }
     }
   }
-  const response = await fetch(url.toString());
+  const response = await fetch(url.toString(), signal ? { signal } : undefined);
   if (!response.ok) {
     let detail = `${response.status} ${response.statusText}`;
     try {
@@ -31,26 +35,37 @@ export function fetchHealth(): Promise<{ status: string; offline: boolean }> {
   return getJson("/api/health");
 }
 
-export function fetchMarketInfo(interval?: string): Promise<MarketInfo> {
-  return getJson("/api/market/info", interval ? { interval } : undefined);
+export function fetchMarketInfo(interval?: string, signal?: AbortSignal): Promise<MarketInfo> {
+  return getJson("/api/market/info", interval ? { interval } : undefined, signal);
 }
 
-export function fetchCandles(options: {
-  symbol: string;
-  interval: string;
-  from?: number;
-  to?: number;
-  limit?: number;
-  cutoff?: number;
-}): Promise<CandlePage> {
-  return getJson("/api/candles", {
-    symbol: options.symbol,
-    interval: options.interval,
-    from: options.from,
-    to: options.to,
-    limit: options.limit,
-    cutoff: options.cutoff,
-  });
+export function fetchCandles(
+  options: {
+    symbol: string;
+    interval: string;
+    from?: number;
+    to?: number;
+    limit?: number;
+    cutoff?: number;
+  },
+  signal?: AbortSignal,
+): Promise<CandlePage> {
+  return getJson(
+    "/api/candles",
+    {
+      symbol: options.symbol,
+      interval: options.interval,
+      from: options.from,
+      to: options.to,
+      limit: options.limit,
+      cutoff: options.cutoff,
+    },
+    signal,
+  );
+}
+
+export function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 export function isCandle(value: unknown): value is Candle {
