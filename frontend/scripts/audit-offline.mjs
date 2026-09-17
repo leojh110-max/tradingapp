@@ -129,7 +129,7 @@ if (sourceFiles.length === 0) {
 }
 
 const sourceText = sourceFiles
-  .filter((file) => file.endsWith("CandlestickChart.tsx"))
+  .filter((file) => file.endsWith("TradingChart.tsx"))
   .map((file) => readFileSync(file, "utf8"))
   .join("\n");
 if (!sourceText.includes("attributionLogo: false")) {

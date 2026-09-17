@@ -71,7 +71,7 @@ def scan(frontend: Path, files: list[Path], *, allow_vendor_urls: bool) -> list[
 def audit(frontend: Path) -> list[str]:
     source_files = iter_files(frontend, ("src", "index.html", "public"))
     dist_files = iter_files(frontend, ("dist",))
-    chart_source = frontend / "src" / "components" / "chart" / "CandlestickChart.tsx"
+    chart_source = frontend / "src" / "components" / "chart" / "TradingChart.tsx"
     violations: list[str] = []
     if not chart_source.exists() or "attributionLogo: false" not in chart_source.read_text(encoding="utf-8"):
         violations.append("chart source must disable layout.attributionLogo")

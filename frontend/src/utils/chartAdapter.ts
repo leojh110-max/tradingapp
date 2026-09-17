@@ -23,6 +23,22 @@ export const CHART_COLORS = {
   neutral: "#8b95a7",
 } as const;
 
+export type ChartPalette = {
+  up: string;
+  down: string;
+  neutral?: string;
+};
+
+export function volumeColor(direction: Direction, palette: ChartPalette = CHART_COLORS): string {
+  if (direction === "up") {
+    return hexToRgba(palette.up, 0.55);
+  }
+  if (direction === "down") {
+    return hexToRgba(palette.down, 0.55);
+  }
+  return hexToRgba(palette.neutral ?? CHART_COLORS.neutral, 0.45);
+}
+
 /**
  * Chart-library adapter. Identity remains `openTime` (unix ms from the API).
  * Numeric conversion is only for plotting; OHLC display must use original strings.
@@ -40,26 +56,28 @@ export function toChartCandle(candle: Candle): ChartCandlePoint {
   };
 }
 
-export function toChartVolume(candle: Candle): ChartVolumePoint {
+export function toChartVolume(candle: Candle, palette: ChartPalette = CHART_COLORS): ChartVolumePoint {
   const direction = candleDirection(candle.open, candle.close);
   return {
     time: candle.openTime / 1000,
     value: Number(candle.volume),
-    color: volumeColor(direction),
+    color: volumeColor(direction, palette),
     openTime: candle.openTime,
   };
 }
 
-export function volumeColor(direction: Direction): string {
-  if (direction === "up") {
-    return "rgba(61, 214, 140, 0.55)";
-  }
-  if (direction === "down") {
-    return "rgba(240, 97, 109, 0.55)";
-  }
-  return "rgba(139, 149, 167, 0.45)";
-}
-
 export function chartTimeToOpenTime(time: number): number {
   return Math.round(time * 1000);
+}
+
+export function hexToRgba(hex: string, alpha: number): string {
+  const match = /^#([0-9a-fA-F]{6})$/u.exec(hex);
+  if (!match) {
+    return `rgba(139, 149, 167, ${alpha})`;
+  }
+  const value = Number.parseInt(match[1], 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

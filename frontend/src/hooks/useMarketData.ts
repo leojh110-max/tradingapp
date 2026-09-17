@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchCandles, fetchMarketInfo, isAbortError } from "../services/api";
+import type { ViewIntent } from "../types/chart";
 import type { Candle, MarketInfo, Timeframe } from "../types/market";
-import { mergeCandles } from "../utils/candles";
+import { findNearestCandle, mergeCandles, shouldReplaceWithLatestWindow } from "../utils/candles";
 import { CHART_LOAD_ERROR, usePrimaryLoadingVisible } from "../utils/loadingOverlay";
+import { goToDateQuery } from "../utils/navigation";
 import { nextRequestId } from "../utils/requestIdentity";
-import { candlePageSize, type TimeRangeMs } from "../utils/timeframes";
+import { candlePageSize, TIMEFRAME_MS, type TimeRangeMs } from "../utils/timeframes";
 
 type Status = "loading" | "ready" | "error";
 
@@ -19,6 +21,7 @@ export function useMarketData() {
   const [olderError, setOlderError] = useState<string | null>(null);
   const [hasOlder, setHasOlder] = useState(true);
   const [restoreRange, setRestoreRange] = useState<TimeRangeMs | null>(null);
+  const [viewIntent, setViewIntent] = useState<ViewIntent | null>(null);
   const candlesRef = useRef<Candle[]>([]);
   const infoRef = useRef<MarketInfo | null>(null);
   const intervalRef = useRef<Timeframe>(interval);
@@ -27,6 +30,7 @@ export function useMarketData() {
   const requestIdRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const olderAbortRef = useRef<AbortController | null>(null);
+  const viewNonceRef = useRef(0);
 
   candlesRef.current = candles;
   infoRef.current = info;
@@ -34,50 +38,59 @@ export function useMarketData() {
 
   const showPrimaryOverlay = usePrimaryLoadingVisible(status === "loading" && error === null);
 
-  const loadTimeframe = useCallback(async (next: Timeframe) => {
+  const beginRequest = useCallback((nextInterval: Timeframe) => {
     olderAbortRef.current?.abort();
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     const requestId = nextRequestId(requestIdRef.current);
     requestIdRef.current = requestId;
-    setPendingInterval(next);
+    setPendingInterval(nextInterval);
     setStatus("loading");
     setError(null);
     setOlderError(null);
-    setHasOlder(true);
     setLoadingOlder(false);
     inFlightRef.current = false;
-    try {
-      const market = await fetchMarketInfo(next, controller.signal);
-      const to = restoreToRef.current ?? undefined;
-      restoreToRef.current = null;
-      const page = await fetchCandles(
-        {
-          symbol: market.symbol,
-          interval: next,
-          to,
-          limit: candlePageSize(next),
-        },
-        controller.signal,
-      );
-      if (requestId !== requestIdRef.current) {
-        return;
-      }
-      setInfo(market);
-      setCandles(page.candles);
-      setIntervalState(next);
-      setHasOlder(hasMoreHistory(page.candles, market));
-      setPendingInterval(null);
-      setStatus("ready");
-    } catch (cause) {
-      if (isAbortError(cause) || requestId !== requestIdRef.current) {
-        return;
-      }
-      setError(CHART_LOAD_ERROR);
-      setStatus("error");
-    }
+    return { controller, requestId };
   }, []);
+
+  const loadTimeframe = useCallback(
+    async (next: Timeframe) => {
+      const { controller, requestId } = beginRequest(next);
+      setHasOlder(true);
+      try {
+        const market = await fetchMarketInfo(next, controller.signal);
+        const to = restoreToRef.current ?? undefined;
+        restoreToRef.current = null;
+        const page = await fetchCandles(
+          {
+            symbol: market.symbol,
+            interval: next,
+            to,
+            limit: candlePageSize(next),
+          },
+          controller.signal,
+        );
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+        setInfo(market);
+        setCandles(page.candles);
+        setIntervalState(next);
+        setHasOlder(hasMoreHistory(page.candles, market));
+        setPendingInterval(null);
+        setStatus("ready");
+        setViewIntent(null);
+      } catch (cause) {
+        if (isAbortError(cause) || requestId !== requestIdRef.current) {
+          return;
+        }
+        setError(CHART_LOAD_ERROR);
+        setStatus("error");
+      }
+    },
+    [beginRequest],
+  );
 
   useEffect(() => {
     void loadTimeframe("1m");
@@ -145,6 +158,125 @@ export function useMarketData() {
     [loadTimeframe, pendingInterval],
   );
 
+  const goToAnchor = useCallback(async (anchorMs: number) => {
+    const activeInterval = intervalRef.current;
+    const market = infoRef.current;
+    if (market === null) {
+      return;
+    }
+    const { controller, requestId } = beginRequest(activeInterval);
+    try {
+      const query = goToDateQuery(anchorMs, activeInterval, market.firstOpenTime);
+      const page = await fetchCandles(
+        {
+          symbol: market.symbol,
+          interval: activeInterval,
+          from: query.from,
+          limit: query.limit,
+        },
+        controller.signal,
+      );
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+      let rows = page.candles;
+      if (rows.length === 0) {
+        const fallback = await fetchCandles(
+          {
+            symbol: market.symbol,
+            interval: activeInterval,
+            to: anchorMs,
+            limit: query.limit,
+          },
+          controller.signal,
+        );
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+        rows = fallback.candles;
+      }
+      setCandles(rows);
+      setHasOlder(hasMoreHistory(rows, market));
+      const nearest = findNearestCandle(rows, anchorMs);
+      viewNonceRef.current += 1;
+      setViewIntent({
+        nonce: viewNonceRef.current,
+        kind: "anchor",
+        centerMs: nearest?.openTime ?? anchorMs,
+      });
+      setPendingInterval(null);
+      setStatus("ready");
+    } catch (cause) {
+      if (isAbortError(cause) || requestId !== requestIdRef.current) {
+        return;
+      }
+      setError(CHART_LOAD_ERROR);
+      setStatus("error");
+    }
+  }, [beginRequest]);
+
+  const goToLatest = useCallback(async () => {
+    const activeInterval = intervalRef.current;
+    const market = infoRef.current;
+    const current = candlesRef.current;
+    if (market === null) {
+      return;
+    }
+    if (current.length > 0 && market.lastOpenTime !== null && current[current.length - 1].openTime >= market.lastOpenTime) {
+      viewNonceRef.current += 1;
+      setViewIntent({
+        nonce: viewNonceRef.current,
+        kind: "latest",
+        centerMs: current[current.length - 1].openTime,
+      });
+      return;
+    }
+    const { controller, requestId } = beginRequest(activeInterval);
+    try {
+      const page = await fetchCandles(
+        {
+          symbol: market.symbol,
+          interval: activeInterval,
+          limit: candlePageSize(activeInterval),
+        },
+        controller.signal,
+      );
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+      const intervalMs = TIMEFRAME_MS[activeInterval];
+      const next = shouldReplaceWithLatestWindow(current, page.candles, intervalMs)
+        ? page.candles
+        : mergeCandles(current, page.candles);
+      setCandles(next);
+      setHasOlder(hasMoreHistory(next, market));
+      viewNonceRef.current += 1;
+      setViewIntent({
+        nonce: viewNonceRef.current,
+        kind: "latest",
+        centerMs: next.length > 0 ? next[next.length - 1].openTime : null,
+      });
+      setPendingInterval(null);
+      setStatus("ready");
+    } catch (cause) {
+      if (isAbortError(cause) || requestId !== requestIdRef.current) {
+        return;
+      }
+      setError(CHART_LOAD_ERROR);
+      setStatus("error");
+    }
+  }, [beginRequest]);
+
+  const requestResetView = useCallback(() => {
+    const current = candlesRef.current;
+    viewNonceRef.current += 1;
+    setViewIntent({
+      nonce: viewNonceRef.current,
+      kind: "reset",
+      centerMs: current.length > 0 ? current[current.length - 1].openTime : null,
+    });
+  }, []);
+
   return {
     interval,
     pendingInterval,
@@ -160,6 +292,10 @@ export function useMarketData() {
     changeTimeframe,
     restoreRange,
     showPrimaryOverlay,
+    viewIntent,
+    goToAnchor,
+    goToLatest,
+    requestResetView,
   };
 }
 
