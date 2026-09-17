@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useChartSettings } from "../../hooks/useChartSettings";
 import { useFullscreen } from "../../hooks/useFullscreen";
+import { useIndicators } from "../../hooks/useIndicators";
 import { useMarketData } from "../../hooks/useMarketData";
 import { useChartShortcuts } from "../../shortcuts/useChartShortcuts";
 import type { Candle, Timeframe } from "../../types/market";
+import { overlayChartLines, paneChartLines, visiblePaneGroups } from "../../indicators/panes";
+import { getIndicatorDefinition } from "../../indicators/registry";
 import { findNearestCandle } from "../../utils/candles";
 import { CHART_LOAD_ERROR } from "../../utils/loadingOverlay";
 import type { TimeRangeMs } from "../../utils/timeframes";
@@ -15,6 +19,8 @@ import { ChartStatusBar } from "./ChartStatusBar";
 import { ChartToolbar } from "./ChartToolbar";
 import { GoToDateDialog } from "./GoToDateDialog";
 import { HistoricalLoadingIndicator } from "./HistoricalLoadingIndicator";
+import { IndicatorLegend } from "./IndicatorLegend";
+import { IndicatorsPanel } from "./IndicatorsPanel";
 import { PrimaryLoadingOverlay } from "./PrimaryLoadingOverlay";
 import { TradingChart } from "./TradingChart";
 
@@ -47,6 +53,44 @@ export function ChartWorkspace() {
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [indicatorsOpen, setIndicatorsOpen] = useState(false);
+  const {
+    instances,
+    computations,
+    error: indicatorError,
+    loadingMessage,
+    addConfigured,
+    editIndicator,
+    hideToggle,
+    removeIndicator,
+    retry: retryIndicators,
+  } = useIndicators({
+    symbol: info?.symbol ?? null,
+    interval,
+    candles,
+    ready: status === "ready",
+  });
+  const overlayLines = useMemo(() => overlayChartLines(instances, computations), [computations, instances]);
+  const paneLines = useMemo(() => paneChartLines(instances, computations), [computations, instances]);
+  const overlayInstances = useMemo(
+    () => instances.filter((instance) => getIndicatorDefinition(instance.type)?.placement === "overlay"),
+    [instances],
+  );
+  const paneInstancesByGroup = useMemo(() => {
+    const groups = new Map<string, typeof instances>();
+    for (const instance of instances) {
+      const group = getIndicatorDefinition(instance.type)?.paneGroup;
+      if (!group) {
+        continue;
+      }
+      const rows = groups.get(group) ?? [];
+      rows.push(instance);
+      groups.set(group, rows);
+    }
+    return groups;
+  }, [instances]);
+  const paneGroupOrder = useMemo(() => visiblePaneGroups(instances), [instances]);
+  const [paneHosts, setPaneHosts] = useState<Record<string, HTMLElement | null>>({});
   const [autoScaleToken, setAutoScaleToken] = useState(0);
   const visibleRangeRef = useRef<TimeRangeMs | null>(null);
   const overlayInterval = pendingInterval ?? interval;
@@ -101,7 +145,7 @@ export function ChartWorkspace() {
     }),
     [goToLatest, requestResetView, toggleFullscreen],
   );
-  useChartShortcuts(shortcutHandlers, !dateOpen && !settingsOpen);
+  useChartShortcuts(shortcutHandlers, !dateOpen && !settingsOpen && !indicatorsOpen);
 
   const historyLabel = loadingOlder
     ? "Loading older candles..."
@@ -120,6 +164,7 @@ export function ChartWorkspace() {
       className="workspace"
       style={{ "--up": settings.upColor, "--down": settings.downColor } as CSSProperties}
     >
+      <div className="toolbar-slot">
       <ChartToolbar
         info={info}
         interval={interval}
@@ -127,6 +172,7 @@ export function ChartWorkspace() {
         settings={settings}
         fullscreen={fullscreen}
         inspectorOpen={showInspectorPanel}
+        indicatorsOpen={indicatorsOpen}
         onSelectTimeframe={onSelectTimeframe}
         onChartType={(chartType) => updateSettings({ chartType })}
         onGoToDate={() => setDateOpen(true)}
@@ -148,11 +194,31 @@ export function ChartWorkspace() {
           }
           setInspectorOpen((open) => !open);
         }}
+        onToggleIndicators={() => setIndicatorsOpen((open) => !open)}
         onToggleFullscreen={() => {
           void toggleFullscreen();
         }}
       />
+      <IndicatorsPanel
+        open={indicatorsOpen}
+        instances={instances}
+        onClose={() => setIndicatorsOpen(false)}
+        onAdd={addConfigured}
+        onEdit={editIndicator}
+        onToggleVisible={hideToggle}
+        onRemove={removeIndicator}
+      />
+      </div>
       <ChartInfoBar candle={infoCandle} interval={interval} />
+      <IndicatorLegend
+        instances={overlayInstances}
+        computations={computations}
+        openTime={infoCandle?.openTime ?? null}
+        loadingMessage={overlayInstances.length > 0 ? loadingMessage : null}
+        error={overlayInstances.length > 0 ? indicatorError : null}
+        onRetry={retryIndicators}
+        onRemove={removeIndicator}
+      />
       <div className="workspace-body">
         <div className="chart-stage">
           {candles.length > 0 ? (
@@ -165,6 +231,11 @@ export function ChartWorkspace() {
               settings={settings}
               selectedOpenTime={selected?.openTime ?? null}
               autoScaleToken={autoScaleToken}
+              overlayLines={overlayLines}
+              paneLines={paneLines}
+              onPaneHostChange={(group, host) => {
+                setPaneHosts((current) => (current[group] === host ? current : { ...current, [group]: host }));
+              }}
               onHover={setHovered}
               onSelect={onSelectCandle}
               onNeedOlder={() => {
@@ -184,6 +255,33 @@ export function ChartWorkspace() {
           <CandleInspector candle={selected} interval={interval} onClose={closeInspector} />
         ) : null}
       </div>
+      {paneGroupOrder.map((group) => {
+        const host = paneHosts[group];
+        const groupInstances = paneInstancesByGroup.get(group) ?? [];
+        if (!host || groupInstances.length === 0) {
+          return null;
+        }
+        const groupHasError = groupInstances.some((instance) =>
+          computations.some((row) => row.output.instanceId === instance.id && row.error),
+        );
+        return (
+          <Fragment key={group}>
+            {createPortal(
+              <IndicatorLegend
+                className="indicator-pane-legend"
+                instances={groupInstances}
+                computations={computations}
+                openTime={infoCandle?.openTime ?? null}
+                loadingMessage={loadingMessage}
+                error={groupHasError ? indicatorError : overlayInstances.length === 0 ? indicatorError : null}
+                onRetry={retryIndicators}
+                onRemove={removeIndicator}
+              />,
+              host,
+            )}
+          </Fragment>
+        );
+      })}
       <ChartStatusBar
         candleCount={candles.length}
         totalCount={info?.candleCount ?? null}

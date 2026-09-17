@@ -99,6 +99,54 @@ export function formatSignedDecimal(value: DecimalValue): string {
   return `+${rendered}`;
 }
 
+export function fromInteger(value: number): DecimalValue {
+  if (!Number.isInteger(value)) {
+    throw new Error("fromInteger requires an integer");
+  }
+  if (value === 0) {
+    return { sign: 1, coeff: 0n, scale: 0 };
+  }
+  if (value < 0) {
+    return { sign: -1, coeff: BigInt(-value), scale: 0 };
+  }
+  return { sign: 1, coeff: BigInt(value), scale: 0 };
+}
+
+export function multiply(left: DecimalValue, right: DecimalValue): DecimalValue {
+  if (left.coeff === 0n || right.coeff === 0n) {
+    return { sign: 1, coeff: 0n, scale: left.scale + right.scale };
+  }
+  return {
+    sign: left.sign === right.sign ? 1 : -1,
+    coeff: left.coeff * right.coeff,
+    scale: left.scale + right.scale,
+  };
+}
+
+export function divide(left: DecimalValue, right: DecimalValue, resultScale: number): DecimalValue {
+  if (isZero(right)) {
+    throw new Error("division by zero");
+  }
+  if (resultScale < 0) {
+    throw new Error("resultScale must be >= 0");
+  }
+  const num = toSignedCoeff(left, left.scale);
+  const den = toSignedCoeff(right, right.scale);
+  const negative = num < 0n !== den < 0n;
+  const absNum = num < 0n ? -num : num;
+  const absDen = den < 0n ? -den : den;
+  const exp = right.scale - left.scale + resultScale;
+  let quotient: bigint;
+  if (exp >= 0) {
+    const scaled = absNum * pow10(exp);
+    quotient = (scaled + absDen / 2n) / absDen;
+  } else {
+    const divisor = absDen * pow10(-exp);
+    quotient = (absNum + divisor / 2n) / divisor;
+  }
+  return fromSignedCoeff(negative ? -quotient : quotient, resultScale);
+}
+
 export function percentOf(numerator: DecimalValue, denominator: DecimalValue, places = 4): string | null {
   if (isZero(denominator)) {
     return null;

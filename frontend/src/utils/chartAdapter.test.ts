@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chartTimeToOpenTime, toChartCandle } from "./chartAdapter";
+import { chartTimeToOpenTime, toChartCandle, toChartLinePoint } from "./chartAdapter";
 import type { Candle } from "../types/market";
 
 const OFFSET_CANDLE: Candle = {
@@ -19,6 +19,13 @@ describe("chart adapter", () => {
     expect(point.time).not.toBe(Math.floor(1_512_367_220_799 / 60_000) * 60);
     expect(chartTimeToOpenTime(point.time)).toBe(OFFSET_CANDLE.openTime);
     expect(point.open).toBe(Number("11478.00000000"));
+  });
+
+  it("plots indicator times from the raw openTime without minute rounding", () => {
+    const point = toChartLinePoint(1_512_367_220_799, "11478.5");
+    expect(point.openTime).toBe(1_512_367_220_799);
+    expect(point.time).toBe(1_512_367_220_799 / 1000);
+    expect(point.time).not.toBe(Math.floor(1_512_367_220_799 / 60_000) * 60);
   });
 
   it("keeps original strings on the source candle", () => {

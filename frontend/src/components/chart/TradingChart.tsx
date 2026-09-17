@@ -7,10 +7,13 @@ import {
   CrosshairMode,
   HistogramSeries,
   LineSeries,
+  LineStyle,
   PriceScaleMode,
   createChart,
   createSeriesMarkers,
   type IChartApi,
+  type IPaneApi,
+  type IPriceLine,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   type SeriesType,
@@ -19,7 +22,10 @@ import {
 } from "lightweight-charts";
 import type { ViewIntent } from "../../types/chart";
 import type { Candle, Timeframe } from "../../types/market";
-import { hexToRgba, toChartCandle, toChartVolume } from "../../utils/chartAdapter";
+import { histogramBarColor } from "../../indicators/histogram";
+import type { IndicatorOverlayLine, IndicatorPaneLine, IndicatorRenderType } from "../../indicators/types";
+import { mainStretchFactor, orderedPaneGroups, paneStretchFactor, uniqueLevels } from "../../indicators/panes";
+import { hexToRgba, toChartCandle, toChartLinePoint, toChartVolume } from "../../utils/chartAdapter";
 import type { ChartSettings, ChartType } from "../../utils/chartSettings";
 import { clampVisibleTimeRange, INITIAL_VISIBLE_BARS, TIMEFRAME_MS, type TimeRangeMs } from "../../utils/timeframes";
 
@@ -31,11 +37,28 @@ type Props = {
   settings: ChartSettings;
   selectedOpenTime: number | null;
   autoScaleToken: number;
+  overlayLines: IndicatorOverlayLine[];
+  paneLines: IndicatorPaneLine[];
+  onPaneHostChange?: (group: string, host: HTMLElement | null) => void;
   onHover: (candle: Candle | null) => void;
   onSelect: (candle: Candle) => void;
   onNeedOlder: () => void;
   onVisibleTimeRangeChange: (range: TimeRangeMs | null) => void;
   loadingOlder: boolean;
+};
+
+type PaneSeriesApi = ISeriesApi<"Line"> | ISeriesApi<"Histogram">;
+
+type PaneSeriesEntry = {
+  api: PaneSeriesApi;
+  renderType: IndicatorRenderType;
+};
+
+type PaneRecord = {
+  pane: IPaneApi<Time>;
+  series: Map<string, PaneSeriesEntry>;
+  priceLines: IPriceLine[];
+  priceLineSeries: PaneSeriesApi | null;
 };
 
 const LEFT_EDGE_THRESHOLD = 40;
@@ -48,6 +71,9 @@ export function TradingChart({
   settings,
   selectedOpenTime,
   autoScaleToken,
+  overlayLines,
+  paneLines,
+  onPaneHostChange,
   onHover,
   onSelect,
   onNeedOlder,
@@ -58,6 +84,9 @@ export function TradingChart({
   const chartRef = useRef<IChartApi | null>(null);
   const mainSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const overlaySeriesRef = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
+  const panesRef = useRef<Map<string, PaneRecord>>(new Map());
+  const onPaneHostChangeRef = useRef(onPaneHostChange);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const candlesRef = useRef<Candle[]>([]);
   const onHoverRef = useRef(onHover);
@@ -79,6 +108,7 @@ export function TradingChart({
   onNeedOlderRef.current = onNeedOlder;
   loadingOlderRef.current = loadingOlder;
   onVisibleTimeRangeChangeRef.current = onVisibleTimeRangeChange;
+  onPaneHostChangeRef.current = onPaneHostChange;
   intervalRef.current = interval;
   settingsRef.current = settings;
 
@@ -94,6 +124,11 @@ export function TradingChart({
         textColor: "#9aa4b2",
         fontFamily: "Segoe UI, system-ui, -apple-system, sans-serif",
         attributionLogo: false,
+        panes: {
+          enableResize: true,
+          separatorColor: "#243042",
+          separatorHoverColor: "rgba(110, 168, 254, 0.18)",
+        },
       },
       grid: {
         vertLines: { color: "#1c2430", visible: settingsRef.current.showGrid },
@@ -187,6 +222,11 @@ export function TradingChart({
 
     return () => {
       markersRef.current?.detach();
+      for (const group of panesRef.current.keys()) {
+        onPaneHostChangeRef.current?.(group, null);
+      }
+      overlaySeriesRef.current.clear();
+      panesRef.current.clear();
       chart.remove();
       chartRef.current = null;
       mainSeriesRef.current = null;
@@ -194,6 +234,214 @@ export function TradingChart({
       markersRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) {
+      return;
+    }
+    const existing = overlaySeriesRef.current;
+    const nextIds = new Set(overlayLines.map((line) => line.id));
+    for (const [id, series] of existing) {
+      if (!nextIds.has(id)) {
+        chart.removeSeries(series);
+        existing.delete(id);
+      }
+    }
+    for (const line of overlayLines) {
+      let series = existing.get(line.id);
+      const width = Math.min(4, Math.max(1, line.lineWidth)) as 1 | 2 | 3 | 4;
+      if (!series) {
+        series = chart.addSeries(LineSeries, {
+          color: line.color,
+          lineWidth: width,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          crosshairMarkerVisible: false,
+          visible: line.visible,
+        });
+        existing.set(line.id, series);
+      } else {
+        series.applyOptions({
+          color: line.color,
+          lineWidth: width,
+          visible: line.visible,
+        });
+      }
+      series.setData(
+        line.points
+          .map((point) => toChartLinePoint(point.openTime, point.value))
+          .filter((point) => Number.isFinite(point.value))
+          .map((point) => ({
+            time: point.time as UTCTimestamp,
+            value: point.value,
+          })),
+      );
+    }
+  }, [overlayLines]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) {
+      return;
+    }
+    const grouped = new Map<string, IndicatorPaneLine[]>();
+    for (const line of paneLines) {
+      const rows = grouped.get(line.paneGroup) ?? [];
+      rows.push(line);
+      grouped.set(line.paneGroup, rows);
+    }
+    const desired = orderedPaneGroups(grouped.keys());
+    const currentOrder = [...panesRef.current.keys()];
+    const orderOk =
+      currentOrder.length === desired.length && currentOrder.every((group, index) => group === desired[index]);
+    if (!orderOk) {
+      for (const [group, record] of [...panesRef.current.entries()]) {
+        for (const entry of record.series.values()) {
+          chart.removeSeries(entry.api);
+        }
+        chart.removePane(record.pane.paneIndex());
+        panesRef.current.delete(group);
+        onPaneHostChangeRef.current?.(group, null);
+      }
+    }
+    const stretch = paneStretchFactor(desired.length);
+    chart.panes()[0]?.setStretchFactor(mainStretchFactor(desired));
+    for (const group of desired) {
+      const lines = grouped.get(group) ?? [];
+      let record = panesRef.current.get(group);
+      if (!record) {
+        const pane = chart.addPane(true);
+        pane.setStretchFactor(stretch);
+        pane.priceScale("right").applyOptions({
+          mode: PriceScaleMode.Normal,
+          borderColor: "#243042",
+          scaleMargins: { top: 0.08, bottom: 0.08 },
+        });
+        record = { pane, series: new Map(), priceLines: [], priceLineSeries: null };
+        panesRef.current.set(group, record);
+        const host = pane.getHTMLElement();
+        if (host) {
+          host.style.position = "relative";
+          onPaneHostChangeRef.current?.(group, host);
+        }
+      } else {
+        record.pane.setStretchFactor(stretch);
+        record.pane.priceScale("right").applyOptions({ mode: PriceScaleMode.Normal });
+      }
+      const nextIds = new Set(lines.map((line) => line.id));
+      for (const [id, entry] of [...record.series.entries()]) {
+        if (!nextIds.has(id)) {
+          chart.removeSeries(entry.api);
+          record.series.delete(id);
+        }
+      }
+      for (const line of lines) {
+        let entry = record.series.get(line.id);
+        if (entry && entry.renderType !== line.renderType) {
+          chart.removeSeries(entry.api);
+          record.series.delete(line.id);
+          entry = undefined;
+        }
+        const width = Math.min(4, Math.max(1, line.lineWidth)) as 1 | 2 | 3 | 4;
+        const scaleOptions =
+          line.scaleMin != null && line.scaleMax != null
+            ? {
+                autoscaleInfoProvider: () => ({
+                  priceRange: { minValue: line.scaleMin as number, maxValue: line.scaleMax as number },
+                }),
+              }
+            : {};
+        if (line.renderType === "histogram") {
+          const options = {
+            color: line.color,
+            lastValueVisible: false,
+            priceLineVisible: false,
+            visible: line.visible,
+            priceFormat: { type: "price" as const, precision: 2, minMove: 0.01 },
+            ...scaleOptions,
+          };
+          if (!entry) {
+            entry = { api: record.pane.addSeries(HistogramSeries, options), renderType: "histogram" };
+            record.series.set(line.id, entry);
+          } else {
+            entry.api.applyOptions(options);
+          }
+          entry.api.setData(
+            line.points
+              .map((point) => {
+                const mapped = toChartLinePoint(point.openTime, point.value);
+                return {
+                  time: mapped.time as UTCTimestamp,
+                  value: mapped.value,
+                  color: histogramBarColor(point.value, {
+                    positive: line.histogramPositiveColor ?? line.color,
+                    negative: line.histogramNegativeColor ?? line.color,
+                    zero: line.histogramZeroColor,
+                  }),
+                };
+              })
+              .filter((point) => Number.isFinite(point.value)),
+          );
+        } else {
+          const options = {
+            color: line.color,
+            lineWidth: width,
+            lastValueVisible: false,
+            priceLineVisible: false,
+            crosshairMarkerVisible: false,
+            visible: line.visible,
+            priceFormat: { type: "price" as const, precision: 2, minMove: 0.01 },
+            ...scaleOptions,
+          };
+          if (!entry) {
+            entry = { api: record.pane.addSeries(LineSeries, options), renderType: "line" };
+            record.series.set(line.id, entry);
+          } else {
+            entry.api.applyOptions(options);
+          }
+          entry.api.setData(
+            line.points
+              .map((point) => toChartLinePoint(point.openTime, point.value))
+              .filter((point) => Number.isFinite(point.value))
+              .map((point) => ({
+                time: point.time as UTCTimestamp,
+                value: point.value,
+              })),
+          );
+        }
+      }
+      const first = record.series.values().next().value?.api;
+      if (record.priceLineSeries && record.priceLines.length > 0) {
+        for (const priceLine of record.priceLines) {
+          try {
+            record.priceLineSeries.removePriceLine(priceLine);
+          } catch {
+            // Series may already have been removed with the pane.
+          }
+        }
+      }
+      record.priceLines = [];
+      record.priceLineSeries = first ?? null;
+      if (first) {
+        for (const level of uniqueLevels(lines)) {
+          record.priceLines.push(
+            first.createPriceLine({
+              price: level.price,
+              color: level.emphasis === "mid" ? "#3a4658" : "#6b7280",
+              lineWidth: 1,
+              lineStyle: level.emphasis === "mid" ? LineStyle.Dotted : LineStyle.Dashed,
+              axisLabelVisible: level.emphasis === "strong",
+              title: level.emphasis === "strong" ? level.label : "",
+            }),
+          );
+        }
+      }
+    }
+    if (desired.length === 0) {
+      chart.panes()[0]?.setStretchFactor(1);
+    }
+  }, [paneLines]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -217,6 +465,9 @@ export function TradingChart({
         secondsVisible: interval === "1m",
       },
     });
+    for (const record of panesRef.current.values()) {
+      record.pane.priceScale("right").applyOptions({ mode: PriceScaleMode.Normal });
+    }
   }, [settings.showGrid, settings.showCrosshair, settings.showVolume, settings.autoScale, settings.logScale, interval]);
 
   useEffect(() => {

@@ -101,6 +101,15 @@ export function IconFullscreen({ size = 16 }: IconProps) {
   );
 }
 
+export function IconIndicators({ size = 16 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+      <path fill="none" stroke="currentColor" strokeWidth="1.4" d="M2 12 5 8l3 2 6-7" />
+      <path fill="none" stroke="currentColor" strokeWidth="1.4" d="M2 10h12" opacity="0.45" />
+    </svg>
+  );
+}
+
 export function IconInspector({ size = 16 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">

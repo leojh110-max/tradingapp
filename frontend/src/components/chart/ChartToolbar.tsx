@@ -8,6 +8,7 @@ import {
   IconCalendar,
   IconCandles,
   IconFullscreen,
+  IconIndicators,
   IconInspector,
   IconLatest,
   IconLine,
@@ -25,6 +26,7 @@ type Props = {
   settings: ChartSettings;
   fullscreen: boolean;
   inspectorOpen: boolean;
+  indicatorsOpen: boolean;
   onSelectTimeframe: (timeframe: Timeframe) => void;
   onChartType: (chartType: ChartType) => void;
   onGoToDate: () => void;
@@ -34,6 +36,7 @@ type Props = {
   onResetView: () => void;
   onSettings: () => void;
   onToggleInspector: () => void;
+  onToggleIndicators: () => void;
   onToggleFullscreen: () => void;
 };
 
@@ -51,6 +54,7 @@ export function ChartToolbar({
   settings,
   fullscreen,
   inspectorOpen,
+  indicatorsOpen,
   onSelectTimeframe,
   onChartType,
   onGoToDate,
@@ -60,6 +64,7 @@ export function ChartToolbar({
   onResetView,
   onSettings,
   onToggleInspector,
+  onToggleIndicators,
   onToggleFullscreen,
 }: Props) {
   return (
@@ -99,6 +104,9 @@ export function ChartToolbar({
         </IconButton>
         <IconButton label="Log Scale" active={settings.logScale} onClick={onToggleLogScale}>
           <IconLogScale />
+        </IconButton>
+        <IconButton label="Indicators" active={indicatorsOpen} onClick={onToggleIndicators}>
+          <IconIndicators />
         </IconButton>
         <IconButton label="Candle Inspector" active={inspectorOpen} onClick={onToggleInspector}>
           <IconInspector />

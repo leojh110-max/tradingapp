@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { add, compare, formatDecimal, formatSignedDecimal, parseDecimal, percentOf, subtract } from "./decimal";
+import { add, compare, divide, formatDecimal, formatSignedDecimal, fromInteger, multiply, parseDecimal, percentOf, subtract } from "./decimal";
 
 describe("parseDecimal", () => {
   it("keeps API scale without float rounding", () => {
@@ -37,5 +37,17 @@ describe("percentOf", () => {
 describe("add", () => {
   it("aligns different scales", () => {
     expect(formatDecimal(add(parseDecimal("1.5"), parseDecimal("0.25")))).toBe("1.75");
+  });
+});
+
+describe("multiply and divide", () => {
+  it("multiplies BTC-scale values without binary float", () => {
+    expect(formatDecimal(multiply(parseDecimal("71245.20"), fromInteger(2)))).toBe("142490.4");
+  });
+
+  it("divides with half-up rounding at a requested scale", () => {
+    expect(formatDecimal(divide(parseDecimal("10"), fromInteger(4), 2))).toBe("2.5");
+    expect(formatDecimal(divide(parseDecimal("1"), fromInteger(8), 2))).toBe("0.13");
+    expect(formatDecimal(divide(parseDecimal("0.00000003"), fromInteger(3), 8))).toBe("0.00000001");
   });
 });

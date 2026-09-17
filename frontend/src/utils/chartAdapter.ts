@@ -70,6 +70,14 @@ export function chartTimeToOpenTime(time: number): number {
   return Math.round(time * 1000);
 }
 
+export function toChartLinePoint(openTime: number, value: string): { time: number; value: number; openTime: number } {
+  return {
+    time: openTime / 1000,
+    value: Number(value),
+    openTime,
+  };
+}
+
 export function hexToRgba(hex: string, alpha: number): string {
   const match = /^#([0-9a-fA-F]{6})$/u.exec(hex);
   if (!match) {
